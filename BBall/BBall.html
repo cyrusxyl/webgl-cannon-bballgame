@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html>
+
+<!--title-->
+<p> <center> <font face="Orbitron" color="#00bfff" size="3"> Air Ball </font> <font face="Orbitron" color="#00bfff" size="1">
+        by Cyrus Liu
+    </font> </center> </p>
+<p> <center> <font face="Orbitron" color="#00bfff" size="3">
+        Score: <span id="score"></span>
+    </font> </center> </p>
+<p> <center> <font face="Orbitron" color="#00bfff" size="0.1">
+    fov <input id="fovSlider" type="number"
+                 min="10" max="120" value="30" /> (10-120)
+
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+    strength <input id="strengthSlider" type="number"
+                 min="0.1" max="10" value="6" /> (0.1-10)
+
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+    angle <input id="angleSlider" type="number"
+                 min="0" max="90" value="45" /> (0-90)
+
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+    time <input id="timeSlider" type="number"
+                min="0.1" max="4" value="0.8" />x (0.1-4)
+
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+    spin x<input id="xSpin" type="number"
+                min="-50" max="50" value="6" />
+        y<input id="ySpin" type="number"
+                min="-50" max="50" value="0" />
+        z<input id="zSpin" type="number"
+                min="-50" max="50" value="0" />
+    </font>
+    </center> </p>
+
+<!--vertex shader-->
+<script id="vertex-shader" type="x-shader/x-vertex">
+
+attribute vec4 vPosition;
+attribute vec4 vColor;
+attribute vec4 vNormal;
+attribute vec4 vObject;
+
+varying vec4 fColor;
+varying vec3 N, L, E, L2;
+
+uniform vec4 lightPosition;
+uniform vec4 lightPosition2;
+uniform mat3 normalMatrix;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform vec3 tr;
+uniform vec3 angles;
+
+
+#define Pi 3.14159
+
+void main()
+{
+    mat4 trM = mat4(1.0, 0.0, 0.0, 0.0,
+                  0.0, 1.0, 0.0, 0.0,
+                  0.0, 0.0, 1.0, 0.0,
+                  tr.x, tr.y, tr.z, 1.0);
+
+    vec3 c = cos(angles);
+    vec3 s = sin(angles);
+
+    // rotation about x-axis (column major order)
+    mat4 rx = mat4( 1.0, 0.0, 0.0, 0.0,
+                    0.0, c.x, s.x, 0.0,
+                    0.0,-s.x, c.x, 0.0,
+                    0.0, 0.0, 0.0, 1.0 );
+
+    mat4 ry = mat4( c.y, 0.0, -s.y, 0.0,
+                    0.0, 1.0,  0.0, 0.0,
+                    s.y, 0.0,  c.y, 0.0,
+                    0.0, 0.0,  0.0, 1.0 );
+
+
+    mat4 rz = mat4( c.z, s.z, 0.0, 0.0,
+                    -s.z,  c.z, 0.0, 0.0,
+                    0.0,  0.0, 1.0, 0.0,
+                    0.0,  0.0, 0.0, 1.0 );
+
+    mat3 nrx = mat3( 1.0, 0.0, 0.0,
+                    0.0, c.x, s.x,
+                    0.0, -s.x, c.x );
+
+    mat3 nry = mat3( c.y, 0.0, -s.y,
+                    0.0, 1.0,  0.0,
+                    s.y, 0.0,  c.y );
+
+
+    mat3 nrz = mat3( c.z, s.z, 0.0,
+                    -s.z,  c.z, 0.0,
+                    0.0,  0.0, 1.0 );
+
+    vec3 light;
+    vec3 pos = (modelViewMatrix * vPosition).xyz;
+
+    if(vObject == vec4(0,0,0,2)) {
+        // compute L for fragment shader,
+        // the unit vector in the direction of the light
+        if(lightPosition.z == 0.0)  L = normalize(lightPosition.xyz);
+        else  L = normalize(lightPosition).xyz - pos;
+        if(lightPosition2.z == 0.0)  L2 = normalize(lightPosition2.xyz);
+        else  L2 = normalize(lightPosition2).xyz - pos;
+
+        // compute E for fragment shader,
+        // the unit vector in the direction of the viewer
+        E =  -normalize(pos);
+
+        // compute N for fragment shader,
+        // the unit normal that will preserve angles
+        N = normalize( normalMatrix*nrz*nry*nrx*vNormal.xyz);
+
+        fColor = vColor;
+        gl_Position = projectionMatrix*modelViewMatrix*trM*rz*ry*rx*vPosition;
+    } else {
+        // compute L for fragment shader,
+        // the unit vector in the direction of the light
+        if(lightPosition.z == 0.0)  L = normalize(lightPosition.xyz);
+        else  L = normalize(lightPosition).xyz - pos;
+        if(lightPosition2.z == 0.0)  L2 = normalize(lightPosition2.xyz);
+        else  L2 = normalize(lightPosition2).xyz - pos;
+
+        // compute E for fragment shader,
+        // the unit vector in the direction of the viewer
+        E =  -normalize(pos);
+
+        // compute N for fragment shader,
+        // the unit normal that will preserve angles
+        N = normalize( normalMatrix*vNormal.xyz);
+
+        fColor = vColor;
+        gl_Position = projectionMatrix*modelViewMatrix*vPosition;
+    }
+
+
+
+
+}
+</script>
+
+<!--fragment shader-->
+<script id="fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+
+varying vec3 N, L, L2, E;
+varying vec4 fColor;
+
+uniform vec4 ambientProduct;
+uniform vec4 diffuseProduct;
+uniform vec4 specularProduct;
+uniform vec4 ambientProduct2;
+uniform vec4 diffuseProduct2;
+uniform vec4 specularProduct2;
+uniform float shininess;
+
+void
+main()
+{
+    vec4 fLightingColor;
+
+    // compute half angle (Binn-Phong)
+    vec3 H = normalize( L + E );
+    vec3 H2 = normalize( L2 + E );
+
+    // ambient component of Binn-Phong
+    vec4 ambient = ambientProduct;
+    ambient += ambientProduct2;
+
+    // diffuse component of Binn-Phong
+    float Kd = max( dot(L, N), 0.0 );
+    float Kd2 = max( dot(L2, N), 0.0 );
+    vec4  diffuse = Kd*diffuseProduct;
+    diffuse += Kd2*diffuseProduct2;
+
+    // specular component of Binn-Phone
+    float Ks = pow( max(dot(N, H), 0.0), shininess );
+    float Ks2 = pow( max(dot(N, H2), 0.0), shininess );
+    vec4  specular = Ks * specularProduct;
+    specular += Ks2 * specularProduct2;
+
+    // if angle is below surface, specular contribution
+    // is "white"
+    if( dot(L, N) < 0.0 ) specular += vec4(0.0, 0.0, 0.0, 1.0);
+    if( dot(L2, N) < 0.0 ) specular += vec4(0.0, 0.0, 0.0, 1.0);
+
+    // Binn-Phong applied fully here
+    vec4 lighting = ambient+diffuse+specular;
+
+    fLightingColor = fColor*lighting;
+    fLightingColor.a = 1.0;
+
+    gl_FragColor = fLightingColor;
+}
+</script>
+
+<!--included files-->
+<script type="text/javascript" src="webgl-utils.js"></script>
+<script type="text/javascript" src="initShaders.js"></script>
+<script type="text/javascript" src="MV.js"></script>
+<script type="text/javascript" src="cannon.js"></script>
+
+<!--main script-->
+<script>
+    "use strict";
+    // global varibles
+
+    // gl
+    var canvas;
+    var gl;
+
+    // modelview variables
+    var eye;
+    var at;
+    var up = vec3(0.0, 1.0, 0.0);
+    var theta  = 0.0*Math.PI/180.0;
+    var phi    = 0.0*Math.PI/180.0;
+    var cameraMode = 0;
+    var modelViewMatrix, modelViewMatrixLoc;
+
+    // projection
+    var projectionMatrix, projectionMatrixLoc;
+    // orthogonal variables
+    var onear = -100;
+    var ofar = 100;
+    var ytop = 2.5;
+    var bottom = -2.5;
+    var left;
+    var right;
+    var orthoMode = false;
+    // perspective variables
+    var pnear = 0.1;
+    var pfar = 50.0;
+    var radius = 5;
+    var  fovy = 30.0;
+    var  aspect;
+
+    // light position, and ambient, diffuse and specular components
+    var lightPosition = vec4(100.0, 100.0, 0.0, 0.0 );
+    var lightAmbient = vec4(0.6, 0.5, 0.4, 1.0 );
+    var lightDiffuse = vec4( 0.1, 0.1, 0.1, 1.0 );
+    var lightSpecular = vec4( 0.3, 0.3, 0.3, 1.0 );
+
+    var lightPosition2 = vec4(10.0, 10.0, 1.0, 1.0 );
+    var lightAmbient2 = vec4(0.3, 0.3, 0.3, 1.0 );
+    var lightDiffuse2 = vec4( 0.12, 0.12, 0.1, 1.0 );
+    var lightSpecular2 = vec4( 0.0, 0.0, 0.0, 1.0 );
+
+    // material information (material reflectivities)
+    var materialAmbient = vec4( 1.0, 1.0, 1.0, 1.0 );
+    var materialDiffuse = vec4( 0.5, 0.5, 0.5, 1.0 );
+    var materialSpecular = vec4( 1.0, 1.0, 1.0, 1.0 );
+    var materialShininess = 20.0;
+
+    var normalMatrix, normalMatrixLoc;
+
+    // attribute arrays
+    var pointsArray = [];
+    var normalsArray = [];
+    var colorsArray = [];
+    var objectArray = [];
+    var index = 0;
+
+    // mouse variables
+    var mouseFlag = 0;
+    var mouseX;
+    var mouseY;
+
+    // physics variables
+    var physics = false;
+    var pause = false;
+    var world;
+    var dt = 1/60 * 0.8;
+    var timeMultiplier = 0.8;
+    var ballBody;
+    var initialBallPosition = vec3(0, 0, 0);
+    var newBallPosition = vec3(0, 1.67, 0);
+    var throwAngle = Math.PI/4;
+    var xDir = 0;
+    var zDir = -1;
+    var throwDirection = vec3(xDir,Math.sin(throwAngle),zDir*Math.cos(throwAngle));
+    var throwForce = 6;
+    var xSpin = 6;
+    var ySpin = 0;
+    var zSpin = 0;
+    var goal = false;
+
+    // movement variables
+    var tr = vec3(0.0,1.67,0.0);
+    var trLoc;
+    var angles = vec3(0.0, 0.0, 0.0);
+    var angLoc;
+    var q0, q1, q2, q3;
+
+    // scoring
+    var score = 0;
+
+    // fundamental building block, take care of normals within the function
+    function triangle(a, b, c, color, obj) {
+
+        // create normal vector to triangle
+        var t1 = subtract(b, a);
+        var t2 = subtract(c, a);
+        var normal = normalize(cross(t2, t1));
+        normal = vec4(normal);
+        normal[3]  = 0.0;
+
+        //alert(normal);
+
+        // place normals at points into array
+        normalsArray.push(normal);
+        normalsArray.push(normal);
+        normalsArray.push(normal);
+
+        // places points into array
+        pointsArray.push(a);
+        pointsArray.push(b);
+        pointsArray.push(c);
+
+        colorsArray.push(color);
+        colorsArray.push(color);
+        colorsArray.push(color);
+
+        objectArray.push(obj);
+        objectArray.push(obj);
+        objectArray.push(obj);
+
+        index += 3;
+    }
+
+    // creating box
+    function Box(position, length, width, height, color, obj) {
+        //var c = cos(angles);
+        //var s = sin(angles);
+
+        //var rx = mat4( 1.0, 0.0, 0.0, 0.0,
+        //    0.0, c.x, s.x, 0.0,
+        //    0.0,-s.x, c.x, 0.0,
+        //    0.0, 0.0, 0.0, 1.0);
+        //
+        //var ry = mat4( c.y, 0.0, -s.y, 0.0,
+        //    0.0, 1.0,  0.0, 0.0,
+        //    s.y, 0.0,  c.y, 0.0,
+        //    0.0, 0.0,  0.0, 1.0 );
+        //
+        //
+        //var rz = mat4( c.z, s.z, 0.0, 0.0,
+        //    -s.z,  c.z, 0.0, 0.0,
+        //    0.0,  0.0, 1.0, 0.0,
+        //    0.0,  0.0, 0.0, 1.0 );
+
+        var v = [
+            vec4(position[0]-length/2, position[1]-height/2,  position[2]+width/2, 1.0),
+            vec4(position[0]-length/2, position[1]+height/2,  position[2]+width/2, 1.0),
+            vec4(position[0]+length/2, position[1]+height/2,  position[2]+width/2, 1.0),
+            vec4(position[0]+length/2, position[1]-height/2,  position[2]+width/2, 1.0),
+            vec4(position[0]-length/2, position[1]-height/2,  position[2]-width/2, 1.0),
+            vec4(position[0]-length/2, position[1]+height/2,  position[2]-width/2, 1.0),
+            vec4(position[0]+length/2, position[1]+height/2,  position[2]-width/2, 1.0),
+            vec4(position[0]+length/2, position[1]-height/2,  position[2]-width/2, 1.0)
+        ];
+        // alert(v[0]);
+
+        //v = rz*ry*rx*v;
+        triangle(v[0],v[1],v[2], color, obj);
+        triangle(v[0],v[2],v[3], color, obj);
+        triangle(v[1],v[5],v[6], color, obj);
+        triangle(v[1],v[6],v[2], color, obj);
+        triangle(v[3],v[2],v[6], color, obj);
+        triangle(v[3],v[6],v[7], color, obj);
+        triangle(v[4],v[0],v[3], color, obj);
+        triangle(v[4],v[3],v[7], color, obj);
+        triangle(v[4],v[5],v[1], color, obj);
+        triangle(v[4],v[1],v[0], color, obj);
+        triangle(v[7],v[5],v[4], color, obj);
+        triangle(v[7],v[6],v[5], color, obj);
+    }
+
+    // creating basketball board
+    function BBoard(position, obj) {
+        var length = 1.80;
+        var width = 0.10;
+        var height = 1.05;
+        var innerL = 1.70;
+        var innerH = 0.95;
+
+        var white = vec4(1.0, 1.0, 1.0, 1.0);
+        var red = vec4(1.0, 0.0, 0.0, 1.0);
+
+        var v = [
+            vec4(position[0]-length/2, position[1]-height/2,  position[2]+width/2, 1.0),  // 0 front bottom left
+            vec4(position[0]-length/2, position[1]+height/2,  position[2]+width/2, 1.0),  // 1 front top left
+            vec4(position[0]+length/2, position[1]+height/2,  position[2]+width/2, 1.0),  // 2 front top right
+            vec4(position[0]+length/2, position[1]-height/2,  position[2]+width/2, 1.0),  // 3 front bottom right
+            vec4(position[0]-length/2, position[1]-height/2,  position[2]-width/2, 1.0),  // 4 back bottom left
+            vec4(position[0]-length/2, position[1]+height/2,  position[2]-width/2, 1.0),  // 5 back top left
+            vec4(position[0]+length/2, position[1]+height/2,  position[2]-width/2, 1.0),  // 6 back top right
+            vec4(position[0]+length/2, position[1]-height/2,  position[2]-width/2, 1.0),  // 7 back bottom right
+            vec4(position[0]-innerL/2, position[1]-innerH/2,  position[2]+width/2, 1.0),  // 8
+            vec4(position[0]-innerL/2, position[1]+innerH/2,  position[2]+width/2, 1.0),  // 9
+            vec4(position[0]+innerL/2, position[1]+innerH/2,  position[2]+width/2, 1.0),  // 10
+            vec4(position[0]+innerL/2, position[1]-innerH/2,  position[2]+width/2, 1.0),  // 11
+            vec4(position[0]-0.59/2, position[1]-0.425,  position[2]+width/2, 1.0),     // 12
+            vec4(position[0]-0.59/2, position[1]+0.065,  position[2]+width/2, 1.0),       // 13
+            vec4(position[0]+0.59/2, position[1]+0.065,  position[2]+width/2, 1.0),     // 14
+            vec4(position[0]+0.59/2, position[1]-0.425,  position[2]+width/2, 1.0),       // 15
+            vec4(position[0]-0.49/2, position[1]-0.375,  position[2]+width/2, 1.0),     // 16
+            vec4(position[0]-0.49/2, position[1]+0.015,  position[2]+width/2, 1.0),      // 17
+            vec4(position[0]+0.49/2, position[1]+0.015,  position[2]+width/2, 1.0),     // 18
+            vec4(position[0]+0.49/2, position[1]-0.375,  position[2]+width/2, 1.0),      // 19
+
+        ];
+
+        triangle(v[1],v[5],v[6], white, obj);
+        triangle(v[1],v[6],v[2], white, obj);
+        triangle(v[3],v[2],v[6], white, obj);
+        triangle(v[3],v[6],v[7], white, obj);
+        triangle(v[4],v[0],v[3], white, obj);
+        triangle(v[4],v[3],v[7], white, obj);
+        triangle(v[4],v[5],v[1], white, obj);
+        triangle(v[4],v[1],v[0], white, obj);
+        triangle(v[7],v[5],v[4], white, obj);
+        triangle(v[7],v[6],v[5], white, obj);
+
+        triangle(v[0], v[8], v[3], red, obj);
+        triangle(v[3], v[8], v[11], red, obj);
+        triangle(v[0], v[8], v[3], red, obj);
+        triangle(v[3], v[8], v[11], red, obj);
+        triangle(v[0], v[1], v[8], red, obj);
+        triangle(v[8], v[1], v[9], red, obj);
+        triangle(v[0], v[8], v[3], red, obj);
+        triangle(v[3], v[8], v[11], red, obj);
+        triangle(v[9], v[1], v[10], red, obj);
+        triangle(v[10], v[1], v[2], red, obj);
+        triangle(v[3], v[11], v[10], red, obj);
+        triangle(v[3], v[10], v[2], red, obj);
+
+        triangle(v[8], v[12], v[11], white, obj);
+        triangle(v[11], v[12], v[15], white, obj);
+        triangle(v[8], v[12], v[11], white, obj);
+        triangle(v[11], v[12], v[15], white, obj);
+        triangle(v[8], v[9], v[12], white, obj);
+        triangle(v[12], v[9], v[13], white, obj);
+        triangle(v[8], v[12], v[11], white, obj);
+        triangle(v[11], v[12], v[15], white, obj);
+        triangle(v[13], v[9], v[14], white, obj);
+        triangle(v[14], v[9], v[10], white, obj);
+        triangle(v[11], v[15], v[14], white, obj);
+        triangle(v[11], v[14], v[10], white, obj);
+
+        triangle(v[12], v[16], v[15], red, obj);
+        triangle(v[15], v[16], v[19], red, obj);
+        triangle(v[12], v[16], v[15], red, obj);
+        triangle(v[15], v[16], v[19], red, obj);
+        triangle(v[12], v[13], v[16], red, obj);
+        triangle(v[16], v[13], v[17], red, obj);
+        triangle(v[12], v[16], v[15], red, obj);
+        triangle(v[15], v[16], v[19], red, obj);
+        triangle(v[17], v[13], v[18], red, obj);
+        triangle(v[18], v[13], v[14], red, obj);
+        triangle(v[15], v[19], v[18], red, obj);
+        triangle(v[15], v[18], v[14], red, obj);
+
+        triangle(v[16],v[17],v[18], white, obj);
+        triangle(v[16],v[18],v[19], white, obj);
+
+    }
+
+    // creating rim
+    function BRim(position, obj) {
+        var top = CircleV(vec3(position[0], position[1]+0.01, position[2]), 0.2375, 64);
+        var out = CircleV(position, 0.2475, 64);
+        var inn = CircleV(position, 0.2275, 64);
+        var bottom = CircleV(vec3(position[0], position[1]-0.015, position[2]), 0.2375, 64);
+
+        var Color = vec4(0.65, 0.16, 0.16, 1.0);
+
+        for(var i=0; i<64; i++) {
+            triangle(out[i], top[i], top[i+1], Color, obj);
+            triangle(out[i+1], out[i], top[i+1], Color, obj);
+
+            triangle(inn[i], bottom[i], bottom[i+1], Color, obj);
+            triangle(inn[i+1], inn[i], bottom[i+1], Color, obj);
+
+            triangle(bottom[i], out[i], out[i+1], Color, obj);
+            triangle(bottom[i+1], bottom[i], out[i+1], Color, obj);
+
+            triangle(inn[i], top[i], top[i+1], Color, obj);
+            triangle(inn[i+1], inn[i], top[i+1], Color, obj);
+        }
+    }
+
+    // three point line
+    function tpLine(position, obj) {
+        var out = CircleV(position, 6.65, 64);
+        var inn = CircleV(position, 6.8, 64);
+
+        var Color = vec4(1.0, 1.0, 1.0, 1.0);
+
+        for(var i=0; i<32; i++) {
+            triangle(out[i], inn[i], inn[i+1], Color, obj);
+            triangle(out[i+1], out[i], inn[i+1], Color, obj);
+        }
+
+    }
+
+    // 2D circle
+    function circle(position, obj) {
+        var out = CircleV(position, 1.65, 64);
+        var inn = CircleV(position, 1.8, 64);
+
+        var Color = vec4(1.0, 1.0, 1.0, 1.0);
+
+        for(var i=0; i<64; i++) {
+            triangle(out[i], inn[i], inn[i + 1], Color, obj);
+            triangle(out[i + 1], out[i], inn[i + 1], Color, obj);
+        }
+    }
+
+    // sphere, nv: number of vertical bands, nh: number of horizontal bands
+    function Ball(position, r, nv, nh, obj) {
+        var v = new Array(nh);
+        var top = vec4(position[0],position[1]+r,position[2], 1.0);
+        var bottom = vec4(position[0],position[1]-r,position[2], 1.0);
+        var color = vec4(1.0,0.6,0.0,1.0);
+        var black = vec4(0.0,0.0,0.0,1.0);
+
+        // for each horizontal bands generate circle vertices
+        for(var i=0; i<nh; i++) {
+            var d = r * Math.sin(Math.PI/2 - (i+1)*Math.PI/(nh+1));
+            var center = vec3(position[0],position[1]+d,position[2]);
+            v[i] = CircleV(center, Math.sqrt(r*r - d*d), nv);
+        }
+
+        // connect poles
+        for(var i=0; i<nv; i++) {
+            triangle(top, v[0][i], v[0][i + 1], color, obj);
+            triangle(bottom,v[nh - 1][i + 1],  v[nh - 1][i],  color, obj);
+        }
+
+        // connect bands in between using triangles
+        for(var i= 0, k=-16; i<nh-1; i++, k++) {
+            for(var j=0; j<nv; j++) {
+                if(j%(nv/4)==0) {
+                    triangle(v[i+1][j],  v[i+1][j+1], v[i][j], black, obj);
+                    triangle(v[i+1][j+1],  v[i][j+1], v[i][j], black, obj);
+                } else {
+                    triangle(v[i+1][j],  v[i+1][j+1], v[i][j], color, obj);
+                    triangle(v[i+1][j+1],  v[i][j+1], v[i][j], color, obj);
+                }
+            }
+        }
+    }
+
+    // generate set of vertices in the shape of a circle
+    function CircleV(position, r, n) {
+        var v = new Array(n+1);
+        for(var i=0; i<n; i++) {
+            v[i] = vec4(position[0]+r*Math.cos(2.0*i*Math.PI/n),position[1],
+                    position[2]+r*Math.sin(2.0*i*Math.PI/n), 1.0);
+        }
+        v[n] = vec4(position[0]+r*Math.cos(2.0*0*Math.PI/n),position[1],position[2]+r*Math.sin(2.0*0*Math.PI/n), 1.0);
+
+        return v;
+    }
+
+    // random number
+    function random(min,max) {
+        return Math.random()*(max-min)+min;
+    }
+
+    // callback function to start things off once
+    // the html data loads
+    window.onload = function init() {
+
+        canvas = document.getElementById( "gl-canvas" );
+
+        gl = WebGLUtils.setupWebGL( canvas );
+        if ( !gl ) { alert( "WebGL isn't available" ); }
+
+        gl.viewport( 0, 0, canvas.width, canvas.height );
+        gl.clearColor( 0.0, 0.0, 0.2, 1.0 );
+
+        aspect = canvas.width/canvas.height;
+
+        // enable hidden surface removal
+        gl.enable(gl.DEPTH_TEST);
+
+        //  Load shaders and initialize attribute buffers
+        var program = initShaders( gl, "vertex-shader", "fragment-shader" );
+        gl.useProgram( program );
+
+        var ambientProduct = mult(lightAmbient, materialAmbient);
+        var diffuseProduct = mult(lightDiffuse, materialDiffuse);
+        var specularProduct = mult(lightSpecular, materialSpecular);
+
+        var ambientProduct2 = mult(lightAmbient2, materialAmbient);
+        var diffuseProduct2 = mult(lightDiffuse2, materialDiffuse);
+        var specularProduct2 = mult(lightSpecular2, materialSpecular);
+
+
+        // court and ground made of overlapping boxes
+        var ground = vec4(0,0,0,0);
+        Box(vec3(0,-1.0020,-1), 100, 100, 2, vec4(0.45,0.77,0.45,1.0), ground);
+        Box(vec3(0,-0.0015,-1), 18.3, 18.2, 0.001, vec4(0.0,0.0,0.0,0.0), ground);
+        Box(vec3(0,-0.0010,-1), 18, 17.8,0.001, vec4(0.55,0.27,0.075,1.0), ground);
+        Box(vec3(0,-0.0005,-1), 15, 14, 0.001, vec4(1.0,1.0,1.0,1.0), ground);
+        Box(vec3(0,0,-1), 14.7, 13.7, 0.001, vec4(0.82,0.41,0.11,1.0), ground);
+        Box(vec3(0,0.005, -4.9), 4.95, 5.95, 0.001, vec4(1.0,1.0,1.0,1.0), ground);
+        Box(vec3(0,0.01, -4.9), 4.8, 5.8, 0.001, vec4(0.529412,0.807843,0.921569,1.0), ground);
+        tpLine(vec3(0,0.01,-6.63),ground);
+        circle(vec3(0,0.01,-2),ground);
+        circle(vec3(0,0.01,6),ground);
+
+        // detailed coded basketball board
+        var board = vec4(0,0,0,1);
+        BBoard(vec3(0, 3.45, -7), board);
+        Box(vec3(0, 3.00, -6.9), 0.20, 0.15, 0.12, vec4(0.65, 0.16, 0.16, 1.0), board);
+        BRim(vec3(0, 3.05, -6.63), board);
+
+        // basketball
+        var ball = vec4(0,0,0,2);
+        Ball(initialBallPosition, 0.12, 128, 128, ball);
+
+        // setting up buffers
+        var nBuffer = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, nBuffer);
+        gl.bufferData( gl.ARRAY_BUFFER, flatten(normalsArray), gl.STATIC_DRAW );
+
+        var vNormal = gl.getAttribLocation( program, "vNormal" );
+        gl.vertexAttribPointer( vNormal, 4, gl.FLOAT, false, 0, 0 );
+        gl.enableVertexAttribArray( vNormal);
+
+        var cBuffer = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, cBuffer );
+        gl.bufferData( gl.ARRAY_BUFFER, flatten(colorsArray), gl.STATIC_DRAW );
+
+        var vColor = gl.getAttribLocation( program, "vColor" );
+        gl.vertexAttribPointer( vColor, 4, gl.FLOAT, false, 0, 0 );
+        gl.enableVertexAttribArray( vColor );
+
+        var vBuffer = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, vBuffer );
+        gl.bufferData( gl.ARRAY_BUFFER, flatten(pointsArray), gl.STATIC_DRAW );
+
+        var vPosition = gl.getAttribLocation( program, "vPosition" );
+        gl.vertexAttribPointer( vPosition, 4, gl.FLOAT, false, 0, 0 );
+        gl.enableVertexAttribArray( vPosition );
+
+        var oBuffer = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, oBuffer );
+        gl.bufferData( gl.ARRAY_BUFFER, flatten(objectArray), gl.STATIC_DRAW );
+
+        var vObject = gl.getAttribLocation( program, "vObject" );
+        gl.vertexAttribPointer( vObject, 4, gl.FLOAT, false, 0, 0 );
+        gl.enableVertexAttribArray( vObject );
+
+        modelViewMatrixLoc = gl.getUniformLocation( program, "modelViewMatrix" );
+        projectionMatrixLoc = gl.getUniformLocation( program, "projectionMatrix" );
+        normalMatrixLoc = gl.getUniformLocation( program, "normalMatrix" );
+        trLoc = gl.getUniformLocation( program, "tr" );
+        angLoc = gl.getUniformLocation( program, "angles");
+
+        // event listeners
+        // Sliders are old names, these are really input fields now
+        document.getElementById("fovSlider").onchange = function() {
+            if(event.srcElement.value < 10||event.srcElement.value>120) {
+                alert("invalid input");
+            } else
+                fovy = event.srcElement.value;
+        };
+        document.getElementById("strengthSlider").onchange = function() {
+            if(event.srcElement.value < 0.1||event.srcElement.value>10) {
+                alert("invalid input");
+            } else
+                throwForce = event.srcElement.value;
+        };
+        document.getElementById("angleSlider").onchange = function() {
+            if(event.srcElement.value < 0||event.srcElement.value>90) {
+                alert("invalid input");
+            } else {
+                throwAngle = event.srcElement.value / 180 * Math.PI;
+                throwDirection = vec3(xDir * Math.cos(throwAngle),
+                        Math.sin(throwAngle),
+                        zDir * Math.cos(throwAngle));
+            }
+        };
+        document.getElementById("timeSlider").onchange = function() {
+            if(event.srcElement.value < 0.1||event.srcElement.value>4) {
+                alert("invalid input");
+            } else {
+                timeMultiplier = event.srcElement.value;
+                dt = 1/60 * timeMultiplier;
+            }
+        };
+        document.getElementById("xSpin").onchange = function() {
+            xSpin = event.srcElement.value;
+        };
+        document.getElementById("ySpin").onchange = function() {
+            ySpin = event.srcElement.value;
+        };
+        document.getElementById("zSpin").onchange = function() {
+            zSpin = event.srcElement.value;
+        };
+
+        // move camera using mouse movement and scrolling, coded by myself
+        canvas.addEventListener("mousedown", function(event){
+            mouseFlag = 1;
+            mouseX = 2*event.clientX/canvas.width-1;
+            mouseY = 2*(canvas.height-event.clientY)/canvas.height-1;
+        });
+        canvas.addEventListener("mouseup", function(event){
+            mouseFlag = 0;
+        });
+        canvas.addEventListener("mousemove", function(event){
+            if(mouseFlag == 1) {
+                var x = 2*event.clientX/canvas.width-1;
+                var y = 2*(canvas.height-event.clientY)/canvas.height-1;
+
+
+                phi= phi + x-mouseX;
+                if(1.8 + radius*Math.sin(theta) >= 0.1){
+                    theta = theta + y-mouseY;
+                } else {
+                    theta = Math.asin((0.1-1.8)/radius);
+                }
+
+                mouseX = x;
+                mouseY = y;
+            }
+        });
+        canvas.addEventListener("mousewheel", function(event) {
+            switch (cameraMode) {
+                case 0:
+                    radius += event.wheelDelta/20;
+                    if(radius < 0.5){
+                        radius = 0.5;
+                    }
+
+                    if(radius > 20){
+                        radius = 20;
+                    }
+                    break;
+                case 1:
+                    ytop += event.wheelDelta/20;
+                    bottom -= event.wheelDelta/20;
+                    if(ytop < 0.5){
+                        ytop = 0.5;
+                        bottom = -0.5;
+                    }
+
+                    if(radius > 10){
+                        ytop = 10;
+                        bottom = -10;
+                    }
+                    left = bottom * aspect;
+                    right = ytop * aspect;
+            }
+            event.preventDefault();
+        }, false);
+
+        // key pressing functions
+        window.addEventListener("keypress", function(event) {
+            if (event.defaultPrevented) {
+                return; // Should do nothing if the key event was already consumed.
+            }
+
+            switch (event.code) {
+                // shoot
+                case "KeyS":
+                    if(!physics) {
+                        initCannon();
+                        physics = true;
+                        pause = false;
+                    }
+                    return;
+                // reset ball location
+                case "KeyR":
+                    tr = vec3(newBallPosition[0]-initialBallPosition[0],
+                            newBallPosition[1]-initialBallPosition[1],
+                            newBallPosition[2]-initialBallPosition[2]) ;
+                    gl.uniform3fv(trLoc, flatten(tr));
+                    ballBody.position.set(newBallPosition[0],newBallPosition[1],newBallPosition[2]);
+                    physics = false;
+                    //goal = false;
+                    return;
+                // switch camera mode
+                case "KeyV":
+                    cameraMode = (cameraMode+1)%2;
+                    return;
+                // lock aim
+                case "KeyA":
+                    xDir = -Math.sin(phi);
+                    zDir = -Math.cos(phi);
+                    throwDirection = vec3(xDir*Math.cos(throwAngle),
+                            Math.sin(throwAngle),
+                            zDir*Math.cos(throwAngle));
+                    console.log("Aiming Locked!");
+                    return;
+                // pause game
+                case "KeyP":
+                    pause = !pause;
+                    return;
+                // new ball position
+                case "KeyN":
+                    newBallPosition = vec3(random(-7, 7), random(0.5, 3.5), random(-6.7, 9));
+                    console.log(newBallPosition);
+                    //console.log(initialBallPosition);
+                    tr = vec3(newBallPosition[0]-initialBallPosition[0],
+                            newBallPosition[1]-initialBallPosition[1],
+                            newBallPosition[2]-initialBallPosition[2]) ;
+                    //console.log(tr);
+                    gl.uniform3fv(trLoc, flatten(tr));
+                    ballBody.position.set(newBallPosition[0],newBallPosition[1],newBallPosition[2]);
+                    physics = false;
+                    goal = false;
+                    return;
+                default:
+                    return;
+            }
+
+            // Consume the event for suppressing "double action".
+            event.preventDefault();
+        }, true);
+
+        // uniform some static variables
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "ambientProduct"),flatten(ambientProduct) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "diffuseProduct"),flatten(diffuseProduct) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "specularProduct"),flatten(specularProduct) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "lightPosition"),flatten(lightPosition) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "ambientProduct2"),flatten(ambientProduct2) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "diffuseProduct2"),flatten(diffuseProduct2) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "specularProduct2"),flatten(specularProduct2) );
+        gl.uniform4fv( gl.getUniformLocation(program,
+                "lightPosition2"),flatten(lightPosition2) );
+        gl.uniform1f( gl.getUniformLocation(program,
+                "shininess"),materialShininess );
+
+        // initialize physics
+        initCannon();
+
+        // animate
+        render();
+
+        // help message
+        alert("Welcome to my basketball shooting game!\nThis game is made with plain WebGL and Cannon.js.\n" +
+                "-Use mouse to move and zoom camera\n" +
+                "-Press A to lock aim\n" +
+                "-Press S to shoot\n" +
+                "-Press R to reset\n" +
+                "-Press N to set new ball location\n" +
+                "-Press V to cycle camera mode");
+    }
+    // recursive render function -- called by the browser when
+    // it is ready to rerender the window
+    function render() {
+        // fullscreen related function
+        resize(gl);
+        // clear the color buffer and the depth buffer
+        gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        // selection of view mode
+        switch (cameraMode)
+        {
+            case 0:
+                if(ballBody.position.y+radius*Math.sin(theta) >= 0.1){
+                    eye = vec3(ballBody.position.x+radius*Math.sin(phi), ballBody.position.y+radius*Math.sin(theta),
+                            ballBody.position.z+radius*Math.cos(phi));
+                } else {
+                    eye = vec3(ballBody.position.x+radius * Math.sin(phi), ballBody.position.y,
+                            ballBody.position.z+radius * Math.cos(phi));
+                }
+                at = vec3(ballBody.position.x, ballBody.position.y, ballBody.position.z);
+                modelViewMatrix = lookAt(eye, at , up);
+                projectionMatrix = perspective(fovy, aspect, pnear, pfar);
+                break;
+            case 1:
+                eye = vec3(Math.sin(phi), 1.8+Math.sin(theta),
+                        Math.cos(phi));
+                at = vec3(0.0, 1.8, 0.0);
+                modelViewMatrix = lookAt(eye, at , up);
+                projectionMatrix = ortho(left, right, bottom, ytop, onear, ofar);
+                break;
+        }
+
+        normalMatrix = [
+            vec3(modelViewMatrix[0][0], modelViewMatrix[0][1], modelViewMatrix[0][2]),
+            vec3(modelViewMatrix[1][0], modelViewMatrix[1][1], modelViewMatrix[1][2]),
+            vec3(modelViewMatrix[2][0], modelViewMatrix[2][1], modelViewMatrix[2][2])
+        ];
+
+        // send uniforms
+        gl.uniformMatrix4fv( modelViewMatrixLoc, false, flatten(modelViewMatrix) );
+        gl.uniformMatrix4fv( projectionMatrixLoc, false, flatten(projectionMatrix) );
+        gl.uniformMatrix3fv(normalMatrixLoc, false, flatten(normalMatrix) );
+
+        // physics-graphic sychronization
+        if(physics&!pause) {
+            world.step(dt);
+            tr[0] = ballBody.position.x - initialBallPosition[0];
+            tr[1] = ballBody.position.y - initialBallPosition[1];
+            tr[2] = ballBody.position.z - initialBallPosition[2];
+
+            q1 = ballBody.quaternion.x;
+            q2 = ballBody.quaternion.y;
+            q3 = ballBody.quaternion.z;
+            q0 = ballBody.quaternion.w;
+
+            angles[0] = Math.atan2(2*(q0*q1+q2*q3), 1-2*(q1*q1+q2*q2));
+            angles[1] = Math.asin(2*(q0*q2-q3*q1));
+            angles[2] = Math.atan2(2*(q0*q3+q1*q2), 1-2*(q2*q2+q3*q3));
+        }
+        gl.uniform3fv(trLoc, flatten(tr));
+        gl.uniform3fv(angLoc, flatten(angles));
+
+        // drawElements draws the "elements" (based on indices)
+        gl.drawArrays( gl.TRIANGLES, 0, index);
+
+        // scoring mechanism
+        var dx = ballBody.position.x;
+        var dy = ballBody.position.y-2.90;
+        var dz = ballBody.position.z+6.63;
+        if(Math.sqrt(dx*dx+dy*dy+dz*dz)<=0.22) {
+            if (goal == false) {
+                goal = true;
+                //alert("Goal!!!!!");
+                if(Math.sqrt(newBallPosition[0]*newBallPosition[0]+(newBallPosition[2]+6.8)*(newBallPosition[2]+6.8))>=7) {
+                    score = score + 3;
+                } else {
+                    score = score + 2;
+                }
+
+            }
+        }
+
+        document.getElementById("score").innerHTML = score;
+
+        requestAnimFrame( render );
+    }
+
+    // fullscreen canvas function, modified from online source
+    function resize(gl) {
+        var realToCSSPixels = window.devicePixelRatio || 1;
+
+        // Lookup the size the browser is displaying the canvas in CSS pixels
+        // and compute a size needed to make our drawingbuffer match it in
+        // device pixels.
+        var displayWidth  = Math.floor(gl.canvas.clientWidth  * realToCSSPixels);
+        var displayHeight = Math.floor(gl.canvas.clientHeight * realToCSSPixels);
+
+        // Check if the canvas is not the same size.
+        if (gl.canvas.width  != displayWidth ||
+                gl.canvas.height != displayHeight) {
+
+            // Make the canvas the same size
+            gl.canvas.width  = displayWidth;
+            gl.canvas.height = displayHeight;
+
+            // Set the viewport to match
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        }
+
+        aspect = gl.canvas.width/gl.canvas.height;
+        left = bottom * aspect;
+        right = ytop * aspect;
+    }
+
+    // initialize physics
+    function initCannon(){
+        // Setup our world
+        world = new CANNON.World();
+        world.quatNormalizeSkip = 0;
+        world.quatNormalizeFast = false;
+        world.gravity.set(0,-9.8,0);
+        world.broadphase = new CANNON.NaiveBroadphase();
+
+        // a physical version of circleV
+        function cannonCircleV(position, r, n) {
+            var v = new Array(n+1);
+            for(var i=0; i<n; i++) {
+                v[i] = new CANNON.Vec3(position[0]+r*Math.cos(2.0*i*Math.PI/n),position[1],position[2]+r*Math.sin(2.0*i*Math.PI/n));
+            }
+            v[n] = new CANNON.Vec3(position[0]+r*Math.cos(2.0*0*Math.PI/n),position[1],position[2]+r*Math.sin(2.0*0*Math.PI/n), 1.0);
+
+            return v;
+        }
+
+        // draw rim body shape
+        function rim() {
+            var v = cannonCircleV(vec3(0,0.015,0),0.24,64); // top 0
+            v = v.concat(cannonCircleV(vec3(0,0,0),0.25,64)); // out 65
+            v = v.concat(cannonCircleV(vec3(0,0,0),0.22,64)); // in 130
+            v = v.concat(cannonCircleV(vec3(0,-0.015,0),0.24,64)); // bottom 195
+
+            var face = [];
+            for(var i=0; i<64; i++) {
+                face.push([i+1, 65+i,i]);
+                face.push([i+1, 65+i+1, 65+i]);
+
+                face.push([65+i+1, 195+i,65+i]);
+                face.push([65+i+1, 195+i+1, 195+i]);
+
+                face.push([i+1, 130+i,i]);
+                face.push([i+1, 130+i+1, 130+i]);
+
+                face.push([130+i+1, 195+i,130+i]);
+                face.push([130+i+1, 195+i+1, 195+i]);
+            }
+            return new CANNON.ConvexPolyhedron(v, face);
+        }
+
+        // Create ball
+        var ballMat = new CANNON.Material();
+        var mass = 0.6237;
+        var ballShape = new CANNON.Sphere(0.12);
+        ballBody = new CANNON.Body({ mass: mass, material: ballMat});
+        ballBody.addShape(ballShape);
+        ballBody.linearDamping = 0.1;
+        ballBody.angularDamping = 0.1;
+        ballBody.position.set(newBallPosition[0],newBallPosition[1],newBallPosition[2]);
+        ballBody.quaternion.setFromEuler(angles[0],angles[1],angles[2],"ZYX");
+        world.addBody(ballBody);
+
+        // applying force and spin
+        var impulse = new CANNON.Vec3(throwForce*throwDirection[0],throwForce*throwDirection[1],throwForce*throwDirection[2]);
+        ballBody.applyImpulse(impulse, ballBody.position);
+        ballBody.angularVelocity.set(xSpin, ySpin, zSpin);
+
+        // board body
+        var boardMat = new CANNON.Material();
+        var boardShape = new CANNON.Box(new CANNON.Vec3(0.9, 0.525, 0.06));
+        var boardBody = new CANNON.Body({ mass: 0, material: boardMat});
+        boardBody.addShape(boardShape);
+        boardBody.position.set(0, 3.45, -7);
+        world.addBody(boardBody);
+
+        // rim neck body
+        var rimNeckMat = new CANNON.Material();
+        var rimNeckShape = new CANNON.Box(new CANNON.Vec3(0.1, 0.075, 0.06));
+        var rimNeckBody = new CANNON.Body({ mass: 0, material: rimNeckMat});
+        rimNeckBody.addShape(rimNeckShape);
+        rimNeckBody.position.set(0, 3, -7.0);
+        world.addBody(rimNeckBody);
+
+        // rim body
+        var rimMat = new CANNON.Material();
+        var rimShape = rim();
+        var rimBody = new CANNON.Body({ mass: 0, material: rimMat});
+        rimBody.addShape(rimShape);
+        rimBody.position.set(0, 3.05, -6.63);
+        world.addBody(rimBody);
+        
+
+        // Create ground and boundaries
+        var groundMaterial = new CANNON.Material();
+        var groundShape = new CANNON.Plane();
+        var groundBody = new CANNON.Body({ mass: 0, material: groundMaterial});
+        groundBody.addShape(groundShape);
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0),-Math.PI/2);
+        world.addBody(groundBody);
+
+        var wall0Shape = new CANNON.Box(new CANNON.Vec3(15, 15, 1));
+        var wall0Body = new CANNON.Body({ mass: 0});
+        wall0Body.addShape(wall0Shape);
+        wall0Body.position.set(0, 15, -15);
+        world.addBody(wall0Body);
+
+        var wall1Shape = new CANNON.Box(new CANNON.Vec3(15, 15, 1));
+        var wall1Body = new CANNON.Body({ mass: 0});
+        wall1Body.addShape(wall1Shape);
+        wall1Body.position.set(0, 15, 15);
+        world.addBody(wall1Body);
+
+        var wall2Shape = new CANNON.Box(new CANNON.Vec3(1, 15, 15));
+        var wall2Body = new CANNON.Body({ mass: 0});
+        wall2Body.addShape(wall2Shape);
+        wall2Body.position.set(15, 15, 0);
+        world.addBody(wall2Body);
+
+        var wall3Shape = new CANNON.Box(new CANNON.Vec3(1, 15, 15));
+        var wall3Body = new CANNON.Body({ mass: 0});
+        wall3Body.addShape(wall3Shape);
+        wall3Body.position.set(-15, 15, 0);
+        world.addBody(wall3Body);
+
+        // physical material which allow bouncing and friction
+        var ball_ground = new CANNON.ContactMaterial(groundMaterial, ballMat, { friction: 0.1, restitution: 0.82});
+        var ball_board = new CANNON.ContactMaterial(boardMat, ballMat, { friction: 0.5, restitution: 0.4});
+        var ball_rimNeck = new CANNON.ContactMaterial(rimNeckMat, ballMat, { friction: 0.1, restitution: 0.82});
+        var ball_rim = new CANNON.ContactMaterial(rimMat, ballMat, { friction: 0.1, restitution: 0.2});
+        world.addContactMaterial(ball_ground);
+        world.addContactMaterial(ball_board);
+        world.addContactMaterial(ball_rimNeck);
+        world.addContactMaterial(ball_rim);
+    }
+</script>
+
+<body>
+
+<style>
+    /* make the body fill the window */
+    html, body {
+        margin: 0px;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+    /* make any canvas fill its container */
+    canvas {
+        width: 100%;
+        height: 100%;
+    }
+</style>
+
+<canvas id="gl-canvas">
+Oops ... your browser doesn't support the HTML5 canvas element
+</canvas>
+
+</body>
+</html>
